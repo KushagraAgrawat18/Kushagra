@@ -2,27 +2,34 @@ from flask import Flask, request, render_template
 import pickle
 import numpy as np
 import json
+import os
 
 app = Flask(__name__)
 
 # -------------------------------
-# Load trained model
-# -------------------------------
-with open('banglore_home_prices_model.pickle', 'rb') as f:
-    model = pickle.load(f)
-
-# -------------------------------
-# Load column data
+# Load column data (safe at startup)
 # -------------------------------
 with open('columns.json', 'r') as f:
     data_columns = json.load(f)['data_columns']
 
 # -------------------------------
+# Lazy Load Model (VERY IMPORTANT)
+# -------------------------------
+model = None
+
+def load_model():
+    global model
+    if model is None:
+        with open('banglore_home_prices_model.pickle', 'rb') as f:
+            model = pickle.load(f)
+
+# -------------------------------
 # Price Prediction Function
 # -------------------------------
 def predict_price(location, sqft, bath, bhk):
-    x = np.zeros(len(data_columns))
+    load_model()   # model loads only when needed
 
+    x = np.zeros(len(data_columns))
     x[0] = sqft
     x[1] = bath
     x[2] = bhk
@@ -55,7 +62,7 @@ def predict():
 
         price = predict_price(location, sqft, bath, bhk)
 
-        # Convert Lakhs → Crores
+        # Format price
         if price >= 100:
             formatted_price = f"₹ {round(price/100, 2)} Cr"
         else:
@@ -67,7 +74,7 @@ def predict():
             locations=data_columns[3:]
         )
 
-    except Exception as e:
+    except Exception:
         return render_template(
             'index.html',
             prediction_text="Error calculating price",
@@ -75,7 +82,8 @@ def predict():
         )
 
 # -------------------------------
-# Run App
+# Run App (Render Compatible)
 # -------------------------------
 if __name__ == "__main__":
-    app.run(debug=True)
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host="0.0.0.0", port=port)
